@@ -4,9 +4,9 @@ import time
 from typing import Awaitable, Callable
 import traceback
 
-
 import logging; logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
 
 class Actor():
     ''' Abstract class for an actor that Nexus
@@ -18,7 +18,6 @@ class Actor():
         ''' Require a name for multiple instances of the same actor/class
             Create initial empty dict of Links for easier referencing
         '''
-        self.q_watchout = None
         self.name = name
         self.links = links
         self.done = False # TODO: obsolete, remove
@@ -30,6 +29,7 @@ class Actor():
         self.q_in = None
         self.q_out = None
 
+
     def __repr__(self):
         """ Internal representation of the Actor mostly for printing purposes.
 
@@ -40,6 +40,7 @@ class Actor():
         '''
         return self.name+': '+str(self.links.keys())
 
+   
     def setStore(self, client):
         """ Sets the client interface to the store
 
@@ -50,11 +51,13 @@ class Actor():
         '''
         self.client = client
 
+    
     def setLinks(self, links):
         ''' General full dict set for links
         '''
         self.links = links
 
+    
     def setCommLinks(self, q_comm, q_sig):
         ''' Set explicit communication links to/from Nexus (q_comm, q_sig)
             q_comm is for messages from this actor to Nexus
@@ -64,23 +67,23 @@ class Actor():
         self.q_sig = q_sig
         self.links.update({'q_comm':self.q_comm, 'q_sig':self.q_sig})
 
+    
+    ## TODO: These functions aren't strictly necessary? Rewrite to use addLink?
+    ## or keep to enforce default behavior q_in, q_out?
     def setLinkIn(self, q_in):
         ''' Set the dedicated input queue
         '''
         self.q_in = q_in
         self.links.update({'q_in':self.q_in})
 
+    
     def setLinkOut(self, q_out):
         ''' Set the dedicated output queue
         '''
         self.q_out = q_out
         self.links.update({'q_out':self.q_out})
 
-    def setLinkWatch(self,  q_watch):
-
-        self.q_watchout= q_watch
-        self.links.update({'q_watchout':self.q_watchout})
-
+   
     def addLink(self, name, link):
         ''' Function provided to add additional data links by name
             using same form as q_in or q_out
@@ -90,10 +93,20 @@ class Actor():
         # User can then use: self.my_queue = self.links['my_queue'] in a setup fcn,
         # or continue to reference it using self.links['my_queue']
 
+
     def getLinks(self):
         ''' Returns dictionary of links
+            TODO: Is this necessary
         '''
         return self.links
+
+
+    def put(self, item):
+        ''' Prefer users do not use, but use q_out as default
+        '''
+        
+        self.q_out.put(item)
+
 
     def setup(self):
         ''' Essenitally the registration process
@@ -101,24 +114,6 @@ class Actor():
             options is a list of options, can be empty
         '''
         raise NotImplementedError
-
-    def put(self, idnames, q_out= None, save=None):
-    
-        if save==None:
-            save= [False]*len(idnames)
-
-        if len(save)<len(idnames):
-            save= save + [False]*(len(idnames)-len(save))
-
-        if q_out == None:
-            q_out= self.q_out
-
-        q_out.put(idnames)
- 
-        for i in range(len(idnames)):
-            if save[i]:
-                if self.q_watchout:
-                    self.q_watchout.put(idnames[i])
 
 
     def run(self):
@@ -142,6 +137,40 @@ class Actor():
             p.nice(19) #lowest as default
             logger.info('Lowered priority of this process: {}'.format(self.name))
             print('Lowered ', os.getpid(), ' for ', self.name)
+
+
+class WatcherActor(Actor):
+
+    def __init__(self, *args, q_watch = None, **kwargs):
+        ''' Require q_watchout? 
+        '''
+        super().__init__(*args, **kwargs)
+        self.q_watchout = q_watch
+
+
+    def setLinkWatch(self,  q_watch):
+
+        self.q_watchout= q_watch
+        self.links.update({'q_watchout':self.q_watchout})
+
+
+    def put(self, idnames, q_out= None, save=None):
+    
+        if save==None:
+            save = [False]*len(idnames)
+
+        if len(save)<len(idnames):
+            save += [False]*(len(idnames)-len(save))
+
+        if q_out == None:
+            q_out = self.q_out
+
+        q_out.put(idnames)
+ 
+        for i in range(len(idnames)):
+            if save[i]:
+                if self.q_watchout:
+                    self.q_watchout.put(idnames[i])
 
 
 class Spike():

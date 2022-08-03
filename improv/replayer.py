@@ -3,8 +3,8 @@ from typing import Callable, List
 
 from pyarrow.plasma import ObjectID
 
-from nexus.actor import Actor, RunManager
-from nexus.store import LMDBStore, LMDBData
+from improv.actor import Actor, RunManager
+from improv.store import LMDBStore, LMDBData
 
 
 class Replayer(Actor):

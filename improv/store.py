@@ -21,8 +21,8 @@ from pyarrow._plasma import PlasmaObjectExists, ObjectNotAvailable, ObjectID
 import logging; logger=logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-# TODO: Use Apache Arrow for better memory usage with the Plasma store
-
+# TODO: Use Apache Arrow for better memory usage with the Plasma store?
+## TODO: Doc strings need new format
 
 class StoreInterface():
     '''General interface for a store
@@ -125,8 +125,6 @@ class Limbo(StoreInterface):
             else:
                 object_id = self.client.put(object)
             
-            self.updateStored(object_name, object_id)
-
             if self.use_hdd:
                 self.lmdb_store.put(object, object_name, obj_id=object_id)
         except PlasmaObjectExists:
@@ -192,13 +190,7 @@ class Limbo(StoreInterface):
             TODO: update for lists of objects
             TODO: replace with getID
         '''
-        #print('trying to get ', object_name)
-        if self.stored.get(object_name) is None:
-            logger.error('Never recorded storing this object: '+object_name)
-            # Don't know anything about this object, treat as problematic
-            raise CannotGetObjectError(query = object_name)
-        else:
-            return self._get(object_name)
+        return self.getID(object_name)
     
     def getID(self, obj_id, hdd_only=False):
         """
@@ -233,7 +225,7 @@ class Limbo(StoreInterface):
         # self._get()
         return self.client.get(ids)
 
-    def get_all(self):
+    def _get_stored_list(self):
         ''' Get a listing of all objects in the store
         '''
         return self.client.list()
@@ -277,23 +269,13 @@ class Limbo(StoreInterface):
         for i in range(number):
             ids.append(plasma.ObjectID(np.random.bytes(20)))
         return ids
-
-    def updateStored(self, object_name, object_id):
-        ''' Update local dict with info we need locally
-            Report to Nexus that we updated the store
-                (did a put or delete/replace)
-        '''
-        self.stored.update({object_name:object_id})
-
-    def getStored(self):
-        ''' returns its info about what it has stored
-        '''
-        return self.stored
+        
 
     def _put(self, obj, id):
         ''' Internal put
         '''
         return self.client.put(obj, id)
+
 
     def _get(self, object_name):
         ''' Get an object from the store using its name
@@ -313,27 +295,12 @@ class Limbo(StoreInterface):
             return res
 
     # TODO: Likely remove all this functionality for security.
-    # Delete deleteName
-    # def deleteName(self, object_name):
-    #     ''' Deletes an object from the store based on name
-    #         assumes we have id from name
-    #         This prevents us from deleting other portions of
-    #         the store that we don't have access to
-    #     '''
-
-    #     if self.stored.get(object_name) is None:
-    #         logger.error('Never recorded storing this object: '+object_name)
-    #         # Don't know anything about this object, treat as problematic
-    #         raise CannotGetObjectError
-    #     else:
-    #         retcode = self._delete(object_name)
-    #         self.stored.pop(object_name)
-
     # def delete(self, id):
     #     try:
     #         self.client.delete([id])
     #     except Exception as e:
     #         logger.error('Couldnt delete: {}'.format(e))
+
 
     # Delete below!
     def saveStore(self, fileName='data/store_dump'):
@@ -342,17 +309,6 @@ class Limbo(StoreInterface):
         '''
         raise NotImplementedError
 
-    def saveTweak(self, tweak_ids, fileName='data/tweak_dump'):
-        ''' Save current Tweak object containing parameters
-            to run the experiment.
-            Tweak is pickleable
-            TODO: move this to Nexus' domain?
-        '''
-        tweak = self.client.get(tweak_ids)
-        #for object ID in list of items in tweak, get from store
-        #and put into dict (?)
-        with open(fileName, 'wb') as output:
-            pickle.dump(tweak, output, -1)
 
     def saveSubstore(self, keys, fileName='data/substore_dump'):
         ''' Save portion of store based on keys
@@ -360,8 +316,10 @@ class Limbo(StoreInterface):
         '''
         raise NotImplementedError
 
-    def saveObj(obj, name):
-        with open('/media/hawkwings/Ext Hard Drive/dump/dump'+str(name)+'.pkl', 'wb') as output: pickle.dump(obj, output)
+
+    def saveObj(folder, obj, name):
+        with open(str(folder)+'/'+str(name)+'.pkl', 'wb') as output: pickle.dump(obj, output)
+
 
 
 class LMDBStore(StoreInterface):
@@ -405,6 +363,7 @@ class LMDBStore(StoreInterface):
         self.commit_thread: Thread = None  # Initialize only after interpreter has forked at the start of each actor.
         signal.signal(signal.SIGINT, self.flush)
 
+
     def get(self, key: Union[plasma.ObjectID, bytes, List[plasma.ObjectID], List[bytes]], include_metadata=False):
         """
         Get object using key (could be any byte string or plasma.ObjectID)
@@ -421,6 +380,7 @@ class LMDBStore(StoreInterface):
             except lmdb.BadRslotError:  # Happens when multiple transactions access LMDB at the same time.
                 pass
 
+
     def _get_one(self, key, include_metadata):
         with self.lmdb_env.begin() as txn:
             r = txn.get(key)
@@ -428,6 +388,7 @@ class LMDBStore(StoreInterface):
         if r is None:
             return None
         return pickle.loads(r) if include_metadata else pickle.loads(r).obj
+
 
     def _get_batch(self, keys, include_metadata):
         with self.lmdb_env.begin() as txn:
@@ -438,12 +399,14 @@ class LMDBStore(StoreInterface):
         else:
             return [pickle.loads(obj).obj for obj in objs if obj is not None]
 
+
     def get_keys(self):
         """ Get all keys in LMDB """
         with self.lmdb_env.begin() as txn:
             with txn.cursor() as cur:
                 cur.first()
                 return [key for key in cur.iternext(values=False)]
+
 
     def put(self, obj, obj_name, obj_id=None, flush_this_immediately=False):
         """
@@ -478,6 +441,7 @@ class LMDBStore(StoreInterface):
             self.commit()
             self.lmdb_env.sync()
 
+
     def flush(self, sig=None, frame=None):
         """ Must run before exiting. Flushes buffer to disk. """
         self.commit()
@@ -485,11 +449,13 @@ class LMDBStore(StoreInterface):
         self.lmdb_env.close()
         exit(0)
 
+
     def commit_daemon(self):
         time.sleep(2 * random())  # Reduce multiple commits at the same time.
         while True:
             time.sleep(self.lmdb_commit_freq)
             self.commit()
+
 
     def commit(self):
         """ Commit objects in {self.put_cache} into LMDB. """
@@ -499,6 +465,7 @@ class LMDBStore(StoreInterface):
                 while not self.put_queue.empty():
                     container = self.put_queue.get_nowait()
                     txn.put(container.name, container.obj, overwrite=True)
+
 
     def delete(self, obj_id):
         """
@@ -514,7 +481,6 @@ class LMDBStore(StoreInterface):
             out = txn.pop(LMDBStore._convert_obj_id_to_bytes(obj_id))
         if out is None:
             raise ObjectNotFoundError
-
 
     @staticmethod
     def _convert_obj_id_to_bytes(obj_id):
@@ -552,6 +518,7 @@ class LMDBData:
         logger.error('Attempt to get queue name from objects not from queue.')
         return None
 
+
 class ObjectNotFoundError(Exception):
 
     def __init__(self, obj_id_or_name):
@@ -566,6 +533,7 @@ class ObjectNotFoundError(Exception):
 
     def __str__(self):
         return self.message
+
 
 class CannotGetObjectError(Exception):
 
@@ -594,78 +562,3 @@ class CannotConnectToStoreError(Exception):
     def __str__(self):
         return self.message
 
-class Watcher():
-    ''' Monitors the store as separate process
-        TODO: Facilitate Watcher being used in multiple processes (shared list)
-    '''
-    # Related to subscribe - could be private, i.e., _subscribe
-    def __init__(self, name, client):
-        self.name = name
-        self.client = client
-        self.flag = False
-        self.saved_ids = []
-
-        self.client.subscribe()
-        self.n = 0
-
-    def setLinks(self, links):
-        self.q_sig = links
-
-    def run(self):
-        while True:
-            if self.flag:
-                try:
-                    self.checkStore2()
-                except Exception as e:
-                    logger.error('Watcher exception during run: {}'.format(e))
-                    #break
-            try:
-                signal = self.q_sig.get(timeout=0.005)
-                if signal == Spike.run():
-                    self.flag = True
-                    logger.warning('Received run signal, begin running')
-                elif signal == Spike.quit():
-                    logger.warning('Received quit signal, aborting')
-                    break
-                elif signal == Spike.pause():
-                    logger.warning('Received pause signal, pending...')
-                    self.flag = False
-                elif signal == Spike.resume(): #currently treat as same as run
-                    logger.warning('Received resume signal, resuming')
-                    self.flag = True
-            except Empty as e:
-                pass #no signal from Nexus
-
-    # def checkStore(self):
-    #     notification_info = self.client.notify()
-    #     recv_objid, recv_dsize, recv_msize = notification_info
-    #     obj = self.client.getID(recv_objid)
-    #     try:
-    #         self.saveObj(obj)
-    #         self.n += 1
-    #     except Exception as e:
-    #         logger.error('Watcher error: {}'.format(e))
-
-    def saveObj(self, obj, name):
-        with open('/media/hawkwings/Ext Hard Drive/dump/dump'+name+'.pkl', 'wb') as output:
-            pickle.dump(obj, output)
-
-    def checkStore2(self):
-        objs = list(self.client.get_all().keys())
-        ids_to_save = list(set(objs) - set(self.saved_ids))
-
-        # with Pool() as pool:
-        #     saved_ids = pool.map(saveObjbyID, ids_to_save)
-        # print('Saved :', len(saved_ids))
-        # self.saved_ids.extend(saved_ids)
-
-        for id in ids_to_save:
-            self.saveObj(self.client.getID(id), str(id))
-            self.saved_ids.append(id)
-
-# def saveObjbyID(id):
-#     client = plasma.connect('/tmp/store')
-#     obj = client.get(id)
-#     with open('/media/hawkwings/Ext\ Hard\ Drive/dump/dump'+str(id)+'.pkl', 'wb') as output:
-#         pickle.dump(obj, output)
-#     return id

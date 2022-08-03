@@ -5,6 +5,7 @@ import asyncio
 import subprocess
 import signal
 import time
+import pickle
 from queue import Empty
 import numpy as np
 import logging; logger = logging.getLogger(__name__)
@@ -16,16 +17,18 @@ from improv.actor import Actor, Spike, RunManager, AsyncRunManager
 from improv.store import ObjectNotFoundError
 from pyarrow.plasma import ObjectNotAvailable
 
+
 class BasicWatcher(Actor):
     '''
     Actor that monitors stored objects from the other actors
     and saves objects that have been flagged by those actors
+    ## TODO: put this in Actor? Add WatcherActor to this? Rename this class?
     '''
 
     def __init__(self, *args, inputs= None):
         super().__init__(*args)
 
-        self.watchin= inputs
+        self.watchin = inputs
         
 
     def setup(self):
@@ -33,18 +36,16 @@ class BasicWatcher(Actor):
         set up tasks and polling based on inputs which will
         be used for asynchronous polling of input queues
         '''
-        self.numSaved= 0
-        self.tasks= []
-        self.polling= self.watchin
-        self.setUp= False
+        self.numSaved = 0
+        self.tasks = []
+        self.polling = self.watchin
+        self.setUp = False
 
     def run(self):
         '''
         continually run the watcher to check all of the 
         input queues for objects to save
         '''
-
-
         with RunManager(self.name, self.watchrun, self.setup, self.q_sig, self.q_comm) as rm:
             logger.info(rm)
 
@@ -64,21 +65,92 @@ class BasicWatcher(Actor):
         if an object is present and then saves the object if found
         '''
 
-        if self.setUp== False:
+        if self.setUp == False:
             for q in self.polling:
                 self.tasks.append(asyncio.ensure_future(q.get_async()))
             self.setUp = True
 
-        done, pending= await asyncio.wait(self.tasks, return_when= concurrent.futures.FIRST_COMPLETED)
+        done, pending = await asyncio.wait(self.tasks, return_when= concurrent.futures.FIRST_COMPLETED)
 
         for i,t in enumerate(self.tasks):
             if t in done or self.polling[i].status == 'done':
                 r = self.polling[i].result # r is array with id and name of object
                 actorID = self.polling[i].getStart() # name of actor asking watcher to save the object
                 try:
-                    obj= self.client.getID(r[0])
+                    obj = self.client.getID(r[0])
                     np.save('output/saved/'+actorID+r[1], obj)
                 except ObjectNotFoundError as e:
                     logger.info(e.message)
                     pass
                 self.tasks[i] = (asyncio.ensure_future(self.polling[i].get_async()))
+
+
+class Watcher():
+    ''' Monitors the store as separate process
+        TODO: Facilitate Watcher being used in multiple processes (shared list)
+        ## Depricated by above?
+    '''
+    # Related to subscribe - could be private, i.e., _subscribe
+    def __init__(self, name, client):
+        self.name = name
+        self.client = client
+        self.flag = False
+        self.saved_ids = []
+
+        self.client.subscribe()
+        self.n = 0
+
+    def setLinks(self, links):
+        self.q_sig = links
+
+    def run(self):
+        while True:
+            if self.flag:
+                try:
+                    self.checkStore2()
+                except Exception as e:
+                    logger.error('Watcher exception during run: {}'.format(e))
+                    #break
+            try:
+                signal = self.q_sig.get(timeout=0.005)
+                if signal == Spike.run():
+                    self.flag = True
+                    logger.warning('Received run signal, begin running')
+                elif signal == Spike.quit():
+                    logger.warning('Received quit signal, aborting')
+                    break
+                elif signal == Spike.pause():
+                    logger.warning('Received pause signal, pending...')
+                    self.flag = False
+                elif signal == Spike.resume(): #currently treat as same as run
+                    logger.warning('Received resume signal, resuming')
+                    self.flag = True
+            except Empty as e:
+                pass #no signal from Nexus
+
+    # def checkStore(self):
+    #     notification_info = self.client.notify()
+    #     recv_objid, recv_dsize, recv_msize = notification_info
+    #     obj = self.client.getID(recv_objid)
+    #     try:
+    #         self.saveObj(obj)
+    #         self.n += 1
+    #     except Exception as e:
+    #         logger.error('Watcher error: {}'.format(e))
+
+    def saveObj(self, obj, folder, name):
+        with open(folder+'/'+name+'.pkl', 'wb') as output:
+            pickle.dump(obj, output)
+
+    def checkStore2(self):
+        objs = list(self.client.get_all().keys())
+        ids_to_save = list(set(objs) - set(self.saved_ids))
+
+        # with Pool() as pool:
+        #     saved_ids = pool.map(saveObjbyID, ids_to_save)
+        # print('Saved :', len(saved_ids))
+        # self.saved_ids.extend(saved_ids)
+
+        for id in ids_to_save:
+            self.saveObj(self.client.getID(id), str(id))
+            self.saved_ids.append(id)
