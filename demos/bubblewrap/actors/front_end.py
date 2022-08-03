@@ -87,9 +87,9 @@ class FrontEnd(QtWidgets.QMainWindow, improv_bubble.Ui_MainWindow):
         try:
             signal = self.q_sig.get(timeout=0.000001)
             if(signal == Spike.started()):
-                self.pushButton_3.setStyleSheet("background-color: rgb(255, 255, 255);")
-                self.pushButton_4.setEnabled(False)
-                self.pushButton_3.setEnabled(True)
+                self.pushButton_2.setStyleSheet("background-color: rgb(255, 255, 255);")
+                self.pushButton.setEnabled(False)
+                self.pushButton_2.setEnabled(True)
             else:
                 QtCore.QTimer.singleShot(10, self.started)
         except Empty as e:
