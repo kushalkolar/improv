@@ -37,10 +37,21 @@ class FrontEnd(QtWidgets.QMainWindow, improv_bubble.Ui_MainWindow):
         #Setup button
         self.pushButton.clicked.connect(_call(self._setup))
         self.pushButton.clicked.connect(_call(self.started))
+        #self.pushButton.clicked.connect(self.plot)
         
         #Run button
         self.pushButton_2.clicked.connect(_call(self._runProcess))
         self.pushButton_2.clicked.connect(_call(self.update)) # Tell Nexus to start
+
+    def plot(self):
+        #plot ellipses
+        x_cords = np.random.randint(0, 100, 10)
+        y_cords = np.random.randint(0, 100, 10)
+        for i in range(10):
+            self.ellipse = pyqtgraph.QtGui.QGraphicEllipseItem(x_cords[i], y_cords[i], 20, 10)
+            self.ellipse.setPen(pg.mkPen((0, 0, 0, 100)))
+            self.ellipse.setBrush(pg.mkBrush((50, 50, 200, 50))) #last param set transparency
+            self.ellipse.setRotation(60) #set angle
 
     def update(self):
         self.visual.getData()
@@ -101,3 +112,6 @@ def _call(fnc, *args, **kwargs):
     def _callback():
         return fnc(*args, **kwargs)
     return _callback
+
+
+if __name__ == "__main__":
