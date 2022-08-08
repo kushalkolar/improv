@@ -63,8 +63,9 @@ class DimReduction(Actor):
     def runProSVD(self):
         try:
             res = self.q_in.get(timeout=0.0005)
-            self.spks = self.client.getID(res[1])[1]
-            self.t = self.client.getID(res[1])[0]
+            self.spks = self.client.getID(res[1])
+            self.t = int(res[0])
+            # print('t is ', self.t, res)
 
             # X_rp = self.reduce_sparseRP(self.spks, transformer=self.transformer)
             self.pro.updateSVD(self.spks)
@@ -75,7 +76,7 @@ class DimReduction(Actor):
                 curr_neural = self.spks
                 # projecting curr_neural onto curr_Q (our tracked subspace) and on full svd u
                 self.projs[i][:, self.t:self.t + self.l] = curr_basis.T @ curr_neural
-                id = self.client.put([self.t, self.projs[i][:, self.t:self.t + self.l]], 'dim_bubble' + str(self.t))
+                id = self.client.put(self.projs[i][:, self.t:self.t + self.l], 'dim_bubble' + str(self.t))
                 try:
                     self.q_out.put([str(self.t), id])
                 except Exception as e:

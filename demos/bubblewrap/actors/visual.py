@@ -34,17 +34,26 @@ class CaimanVisual(Actor):
         super().__init__(*args)
 
     def setup(self):
-        self.data = []
         self.bw_data = []
-    def run(self):
+        self.A = np.load("/home/improv/data/saved_A.npy")
+        self.mu = np.load("/home/improv/data/saved_mu.npy")
+        self.L = np.load("/home/improv/data/saved_L.npy")
+        self.n_obs = np.load("/home/improv/data/saved_n_obs.npy")
         pass  # NOTE: Special case here, tied to GUI
+
+
+    def run(self):
+        pass
 
     def getData(self):
         try:
-            res = self.q_in.get(timeout=0.0005)
+            
+            # res = self.q_in.get(timeout=0.0005)
+            # print('got res ', res)
+            # self.data = self.client.getID(res[1])
             bw_res = self.bw_in.get(timeout=0.0005)
-            self.data = self.client.getID(res[1])
             self.bw_data = [self.client.getID(bw_res[i]) for i in range(7)]
+
         except Empty as e:
             pass
         except Exception as e:

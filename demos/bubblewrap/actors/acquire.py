@@ -46,7 +46,7 @@ class Acquirer(Actor):
         elif (self.frame_num < self.num_iters):
             frame = self.arr[:, self.t:self.t+self.l]
             t = time.time()
-            id = self.client.put([self.t, frame], 'acq_bubble' + str(self.frame_num))
+            id = self.client.put(frame, 'acq_bubble' + str(self.frame_num))
             self.timestamp.append([time.time(), self.frame_num])
             try:
                 self.q_out.put([str(self.frame_num), id])
