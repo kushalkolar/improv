@@ -1,5 +1,5 @@
 from calendar import c
-
+import numpy as np
 import click
 import pyqtgraph
 import matplotlib.pylab as plt
