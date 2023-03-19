@@ -11,8 +11,9 @@ import caiman as cm
 from caiman.source_extraction import cnmf
 from caiman.utils.nn_models import (fit_NL_model, create_LN_model, quantile_loss, rate_scheduler)
 
-
 from improv.actor import Actor
+
+from .metadata import AcquisitionMetadata, TwoPhotonFrame
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -93,7 +94,7 @@ class OnACIDActor(Actor):
         # TODO: allow these to be settable via zmq
         self.init_batch = 1000  # number of frames to use for initialization
         self.frame_index = 0
-        # TODO: this should be recieved from zmq, maybe sent from matlab?
+        # TODO: these should be recieved from store
         dtype = "uint16"
         self.shape = (512, 512)
         self.fr = 15.5  # frame rate (Hz)
@@ -103,20 +104,15 @@ class OnACIDActor(Actor):
 
         logger.info("OnACID ready")
 
-    def _get_buffer(self) -> bytes | None:
-        buffer = None
-
+    def _get_frame(self) -> TwoPhotonFrame:
         try:
             # TODO: this frame will just be raw bytes which contain a header of specific length
             # TODO: strip and parse header from each received frame
             buffer = self.q_in.get(timeout=0.05)
         except Empty:
             pass
-
         except:
             logger.error("Could not get frame!")
-
-        return buffer
 
     def _initialize_onacid(self, frame):
         if self.frame_index == self.init_batch:
@@ -139,14 +135,10 @@ class OnACIDActor(Actor):
     def runStep(self):
         """Receives data from queue, performs OnACID"""
 
-        # TODO: this frame will just be raw bytes which
-        # TODO: contain a header of specific length
-        # TODO: we should probably parse the header into python objects within this actor
-        buffer = self._get_buffer()
+        frame2p = self._get_frame()
 
-        # TODO: parse out actual frame
-
-        frame = np.frombuffer(buffer, dtype=self.dtype)
+        # TODO: figure out how to deal with dual channels
+        frame = frame2p.channels[0]
 
         # add frame to initialization
         if not self.onacid_initialized:
@@ -158,6 +150,9 @@ class OnACIDActor(Actor):
             # TODO: it should be either frame_index or frame_index + 1, or frame_index - 1
             mcorr = self.cnmf_obj.mc_next(self.frame_index, frame)
 
+            # TODO: We probably also want to send more information to the viz frontend
+            # TODO: such as frame index and other metadata that we already have
+            # TODO: maybe we just constructe a TwoPhotonFrame object and send the bytes?
             # send mcorr frame for visualization
             self.socket.send(mcorr)
 
